@@ -1,0 +1,31 @@
+# ─────────────────────────────────────────────────────────────
+# E1001 E-ink Display — command_line sensor (school schedule)
+#
+# Add to configuration.yaml:
+#   command_line: !include home-assistant/command_line.yaml
+# ─────────────────────────────────────────────────────────────
+
+# Main schedule sensor — fetches today's and tomorrow's timetable.
+# The script reads credentials from /config/secrets.yaml.
+# scan_interval is intentionally long; the update automations handle
+# more frequent refreshes during school hours.
+- sensor:
+    name: "School Schedule"
+    unique_id: school_schedule
+    command: "python3 /config/scripts/edupage_schedule.py"
+    value_template: "{{ value_json.count_today }} lessons today"
+    json_attributes:
+      - data_today
+      - data_tomorrow
+      - date_today
+      - date_tomorrow
+      - count_today
+      - count_tomorrow
+      - school_start_today
+      - school_end_today
+      - school_start_tomorrow
+      - school_end_tomorrow
+      - speech_today_ssml
+      - speech_tomorrow_ssml
+    scan_interval: 3600
+    command_timeout: 60

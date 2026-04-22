@@ -1,0 +1,104 @@
+# ─────────────────────────────────────────────────────────────
+# E1001 E-ink Display — Home Assistant Automations
+# Add these entries to your automations.yaml, or include this
+# file via packages.
+# ─────────────────────────────────────────────────────────────
+
+# 1. Refresh school schedule sensor daily and during morning hours.
+#    The command_line sensor has a 1h scan_interval; this ensures
+#    it is also updated at midnight and every 15 min from 07:00–08:30.
+- id: 'eink_schedule_update'
+  alias: Update School Schedule
+  description: >
+    Refreshes sensor.school_schedule at midnight and every 15 minutes
+    during the morning rush (07:00–08:30).
+  triggers:
+    - trigger: time
+      at: '00:00:01'
+    - trigger: time
+      at: '07:00:00'
+    - trigger: time
+      at: '07:15:00'
+    - trigger: time
+      at: '07:30:00'
+    - trigger: time
+      at: '07:45:00'
+    - trigger: time
+      at: '08:00:00'
+    - trigger: time
+      at: '08:15:00'
+    - trigger: time
+      at: '08:30:00'
+  conditions: []
+  actions:
+    - action: homeassistant.update_entity
+      data:
+        entity_id:
+          - sensor.school_schedule
+  mode: single
+
+# 2. Set a long sleep interval at night to save battery.
+- id: 'eink_night_sleep'
+  alias: E-ink Display — Night Mode
+  description: >
+    Sets a long sleep interval at 23:00 to save battery overnight.
+    The display will wake up infrequently until the morning automation resets it.
+  triggers:
+    - trigger: time
+      at: '23:00:00'
+  conditions: []
+  actions:
+    - action: input_number.set_value
+      target:
+        entity_id: input_number.eink_sleep_duration
+      data:
+        value: 45
+  mode: single
+
+# 3. Set a short refresh interval on school-day mornings.
+- id: 'eink_morning_refresh'
+  alias: E-ink Display — Morning Refresh (Weekdays)
+  description: >
+    Switches to a short refresh interval at 07:00 on weekdays so the
+    display stays up to date during the school morning.
+  triggers:
+    - trigger: time
+      at: '07:00:00'
+      weekday:
+        - mon
+        - tue
+        - wed
+        - thu
+        - fri
+  conditions: []
+  actions:
+    - action: input_number.set_value
+      target:
+        entity_id: input_number.eink_sleep_duration
+      data:
+        value: 3
+  mode: single
+
+# 4. Dynamically adjust the refresh interval based on school status.
+#    The sensor.school_status refresh_interval attribute drives this value
+#    so the display sleeps longer when nothing is happening and updates
+#    frequently just before / during school.
+- id: 'eink_dynamic_update_rate'
+  alias: E-ink Display — Dynamic Update Rate
+  description: >
+    Updates input_number.eink_sleep_duration whenever sensor.school_status
+    changes state or once per minute (to handle attribute-only changes).
+  triggers:
+    - trigger: state
+      entity_id: sensor.school_status
+    - trigger: time_pattern
+      minutes: '/1'
+  conditions: []
+  actions:
+    - action: input_number.set_value
+      target:
+        entity_id: input_number.eink_sleep_duration
+      data:
+        value: >-
+          {{ state_attr('sensor.school_status', 'refresh_interval') | int(5) }}
+  mode: single

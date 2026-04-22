@@ -1,0 +1,96 @@
+type: custom:html-template-card
+ignore_line_breaks: true
+content: >
+  {# Load school status #}
+  {% set status = states('sensor.school_status') %}
+  {% set start  = state_attr('sensor.school_status', 'start') %}
+  {% set end    = state_attr('sensor.school_status', 'end') %}
+
+  <div style="font-family:monospace; background:#fff; color:#000;
+  border:2px solid #000; padding:10px; text-align:center;">
+
+  {# 1. SCHOOL RUNNING #}
+  {% if status == 'school_running' %}
+    <div style="font-size:1.1em; color:#555; font-weight:bold;">SCHOOL IN SESSION</div>
+    <div style="font-size:2.8em; font-weight:900; margin: 5px 0;">
+      {{ start | default('?') }} – {{ end | default('?') }}
+    </div>
+
+  {# 2. COUNTDOWN (school starts soon) #}
+  {% elif status == 'school_soon' %}
+    {% set remaining = [((as_timestamp(today_at(start)) - as_timestamp(now())) / 60) | int, 0] | max %}
+    <div style="font-size:1.1em; color:#555; font-weight:bold;">STARTS IN</div>
+    <div style="font-size:2.8em; font-weight:900; margin: 5px 0;">
+      {% set h = (remaining // 60) %}{% set m = (remaining % 60) %}
+      {{ h ~ 'h ' if h > 0 }}{{ m }}min
+    </div>
+    <div style="border-top:1px solid #000; padding-top:5px; font-size:1.2em;">
+      {{ start }} - {{ end }}
+    </div>
+
+  {# 3. SCHOOL TODAY (normal morning) #}
+  {% elif status == 'school_today' %}
+    <div style="font-size:1.1em; text-transform:uppercase; font-weight:bold;">School Today</div>
+    <ha-icon icon="mdi:calendar-clock" style="--mdc-icon-size: 50px; margin: 10px 0;"></ha-icon>
+    <div style="font-size:1.8em; font-weight:bold;">{{ start }} - {{ end }}</div>
+
+  {# 4. PREVIEW TOMORROW (afternoon / Sunday evening) #}
+  {% elif status == 'preview_tomorrow' %}
+    <div style="font-size:1.1em; text-transform:uppercase; font-weight:bold;">Tomorrow</div>
+    <ha-icon icon="mdi:calendar-clock" style="--mdc-icon-size: 50px; margin: 10px 0;"></ha-icon>
+    <div style="font-size:1.8em; font-weight:bold;">{{ start }} - {{ end }}</div>
+
+  {# 5. HOLIDAY TOMORROW #}
+  {% elif status == 'holiday_tomorrow' %}
+    <div style="display: flex; align-items: center; justify-content: center; padding: 5px;">
+      <div style="flex: 1; text-align: center; padding-right: 12px;">
+        <ha-icon icon="mdi:beach" style="--mdc-icon-size: 60px;"></ha-icon>
+      </div>
+      <div style="flex: 2.5; text-align: left;">
+        <div style="font-size: 1.2em; font-weight: bold; margin-bottom: 2px;">Tomorrow:</div>
+        <div style="font-size: 2.0em; font-weight: 900; display: inline-block; line-height: 1;">HOLIDAY!</div>
+      </div>
+    </div>
+
+  {# 6. PUBLIC HOLIDAY TOMORROW #}
+  {% elif status == 'public_holiday_tomorrow' %}
+    <div style="display: flex; align-items: center; justify-content: center; padding: 5px;">
+      <div style="flex: 1; text-align: center; padding-right: 15px;">
+        <ha-icon icon="mdi:party-popper" style="--mdc-icon-size: 60px;"></ha-icon>
+      </div>
+      <div style="flex: 3; text-align: left; line-height: 1.1;">
+        <div style="font-size: 1.2em; font-weight: bold;">Tomorrow is a</div>
+        <div style="font-size: 1.6em; font-weight: 900; text-transform: uppercase; background: #000; color: #fff; padding: 0 5px;">PUBLIC HOLIDAY!</div>
+        <div style="font-size: 1.0em; margin-top: 3px;">(Enjoy the day off!)</div>
+      </div>
+    </div>
+
+  {# 7. FRIDAY AFTERNOON — WEEKEND! #}
+  {% elif status == 'friday_weekend' %}
+    <div style="transform: rotate(-2deg);">
+      <div style="font-size: 1.8em; font-weight: 900; text-transform: uppercase;">Hands up for</div>
+      <div style="background:#000; color:#fff; display:inline-block; padding:2px 10px; font-size:1.5em; font-weight:900;">WEEKEND!</div>
+    </div>
+
+  {# 8. WEEKEND #}
+  {% elif status == 'weekend' %}
+    <div style="padding:10px;">
+      <div style="font-size: 2em; font-weight: 900;">Weekend</div>
+    </div>
+
+  {# 9. HOLIDAY / PUBLIC HOLIDAY / NO SCHOOL #}
+  {% elif status in ['holiday', 'public_holiday', 'no_school_tomorrow', 'no_school_today'] %}
+    <ha-icon icon="{{ 'mdi:palm-tree' if status == 'holiday' else 'mdi:calendar-star' if status == 'public_holiday' else 'mdi:bird' }}"
+             style="--mdc-icon-size: 70px; margin-bottom: 10px;"></ha-icon>
+    <div style="font-size: 2em; font-weight: bold; text-transform: uppercase;">{{ status | replace('_', ' ') }}</div>
+    <div style="font-size: 1.2em;">Sleep in &amp; enjoy!</div>
+
+  {# 10. FALLBACK / ERROR #}
+  {% else %}
+    <div style="color:red;">
+      <ha-icon icon="mdi:alert-circle" style="--mdc-icon-size: 40px;"></ha-icon><br>
+      Status: {{ status }}<br>
+      Check sensors!
+    </div>
+  {% endif %}
+  </div>

@@ -1,0 +1,46 @@
+# ─────────────────────────────────────────────────────────────
+# E1001 E-ink Display — Home Assistant Helpers
+#
+# Option A (recommended): Use this file as a HA Package.
+#   Add to configuration.yaml:
+#     homeassistant:
+#       packages:
+#         eink: !include home-assistant/helpers.yaml
+#
+# Option B: Create the helpers manually in the HA UI under
+#   Settings → Devices & Services → Helpers
+# ─────────────────────────────────────────────────────────────
+
+input_boolean:
+  eink_maintenance_mode:
+    name: E-ink Maintenance Mode
+    icon: mdi:tools
+
+input_number:
+  # Sleep duration in minutes — set by automations based on school status.
+  # The ESPHome firmware reads this value before going into deep sleep.
+  eink_sleep_duration:
+    name: E-ink Sleep Duration
+    icon: mdi:bed-clock
+    min: 0
+    max: 120
+    step: 1
+    unit_of_measurement: min
+
+  # How many minutes before school start the alarm should fire.
+  school_alarm_lead_time:
+    name: School Alarm Lead Time
+    icon: mdi:alarm-plus
+    min: 0
+    max: 120
+    step: 5
+    initial: 60
+    unit_of_measurement: min
+
+input_text:
+  # The full URL of the dashboard view rendered as a PNG image (Puppet/Browserless).
+  # Set this to the URL of your e1001 dashboard view.
+  eink_url:
+    name: E-ink Display URL
+    icon: mdi:web
+    max: 255

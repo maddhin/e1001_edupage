@@ -1,0 +1,70 @@
+type: custom:button-card
+# Replace with your calendar entity ID
+entity: calendar.your_family_calendar
+show_icon: false
+show_name: false
+styles:
+  card:
+    - padding: 0px
+    - border: none
+    - background: white
+    - border-radius: 0px
+    - box-shadow: none
+    - "--pad-left": 4px
+  grid:
+    - grid-template-areas: '"content"'
+    - grid-template-columns: 1fr
+  custom_fields:
+    content:
+      - width: 100%
+      - text-align: left
+custom_fields:
+  content: |
+    [[[
+      const evs = entity.attributes.data;
+      const today = new Date().toLocaleDateString('en-CA');
+      const t_date = new Date();
+      t_date.setDate(t_date.getDate() + 1);
+      const tomorrow = t_date.toLocaleDateString('en-CA');
+
+      // Optional: trash collection sensor
+      // const trash_day  = states['sensor.next_trash_pickup'].state.toLowerCase();
+      // const trash_type = states['sensor.next_trash_type'].state;
+
+      const pL = 'var(--pad-left)';
+
+      let res = '<div style="color:black; font-family:sans-serif; line-height:1.2; width:100%; padding-left:' + pL + ';">';
+
+      res += '<div style="font-size:1.4em; font-weight:bold; border-bottom:2px solid black; margin-bottom:8px; width:100%;">Events</div>';
+      let foundToday = false;
+
+      if (evs) {
+        evs.forEach(e => {
+          const sT = new Date(e.start);
+          if (sT.toLocaleDateString('en-CA') === today) {
+            foundToday = true;
+            const z = e.all_day ? 'All day' : sT.getHours().toString().padStart(2, '0') + ':' + sT.getMinutes().toString().padStart(2, '0');
+            res += '<div style="display:flex; gap:6px; margin-bottom:3px; padding-bottom:2px; border-bottom:1px solid #aaa; width:100%;"><div style="font-size:1.2em; font-weight:bold; min-width:45px;">' + z + '</div><div style="font-size:1.2em; font-weight:bold;">' + e.summary + '</div></div>';
+          }
+        });
+      }
+      if (!foundToday) res += '<div style="font-size:0.9em; font-style:italic; margin-bottom:4px;">No events today</div>';
+
+      res += '<div style="font-size:1.2em; font-weight:bold; border-bottom:1px solid #555; margin-top:12px; margin-bottom:6px; width:100%;">Tomorrow</div>';
+      let foundTomorrow = false;
+
+      if (evs) {
+        evs.forEach(e => {
+          const sT = new Date(e.start);
+          if (sT.toLocaleDateString('en-CA') === tomorrow) {
+            foundTomorrow = true;
+            const z = e.all_day ? 'All day' : sT.getHours().toString().padStart(2, '0') + ':' + sT.getMinutes().toString().padStart(2, '0');
+            res += '<div style="display:flex; gap:6px; margin-bottom:2px; padding-bottom:1px; border-bottom:1px solid #aaa; width:100%;"><div style="font-size:1.05em; font-weight:bold; min-width:45px;">' + z + '</div><div style="font-size:0.95em; font-weight:bold;">' + e.summary + '</div></div>';
+          }
+        });
+      }
+      if (!foundTomorrow) res += '<div style="font-size:0.9em; font-style:italic;">No events tomorrow</div>';
+
+      res += '</div>';
+      return res;
+    ]]]

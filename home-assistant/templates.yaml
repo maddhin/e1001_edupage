@@ -1,0 +1,281 @@
+# ─────────────────────────────────────────────────────────────
+# E1001 E-ink Display — Home Assistant Templates
+# Include this file in configuration.yaml:
+#   template: !include home-assistant/templates.yaml
+# or merge the blocks below into your existing templates.yaml
+# ─────────────────────────────────────────────────────────────
+
+# ── Binary sensors ────────────────────────────────────────────
+  - binary_sensor:
+    - name: "Child Has PE Today"
+      unique_id: child_has_pe_today
+      state: >
+        {% set data = state_attr('sensor.school_schedule', 'data_today') %}
+        {% if data %}
+          {{ data | selectattr('subject', 'eq', 'Sport') | list | count > 0 }}
+        {% else %}
+          false
+        {% endif %}
+      icon: >
+        {% if is_state('binary_sensor.child_has_pe_today', 'on') %}
+          mdi:soccer
+        {% else %}
+          mdi:soccer-field
+        {% endif %}
+
+    - name: "Child Has PE Tomorrow"
+      unique_id: child_has_pe_tomorrow
+      state: >
+        {% set data = state_attr('sensor.school_schedule', 'data_tomorrow') %}
+        {% if data %}
+          {{ data | selectattr('subject', 'eq', 'Sport') | list | count > 0 }}
+        {% else %}
+          false
+        {% endif %}
+      icon: >
+        {% if is_state('binary_sensor.child_has_pe_tomorrow', 'on') %}
+          mdi:soccer
+        {% else %}
+          mdi:soccer-field
+        {% endif %}
+
+# ── Regular sensors ───────────────────────────────────────────
+  - sensor:
+    # ── Today ────────────────────────────────────────────────
+    - name: "School Start Today"
+      unique_id: school_start_today
+      state: >
+        {% if state_attr('sensor.school_schedule', 'school_start_today') is none %}
+          no school
+        {% else %}
+          {{ state_attr('sensor.school_schedule', 'school_start_today') }}
+        {% endif %}
+      icon: mdi:clock-start
+
+    - name: "School End Today"
+      unique_id: school_end_today
+      state: >
+        {% if state_attr('sensor.school_schedule', 'school_end_today') is none %}
+          no school
+        {% else %}
+          {{ state_attr('sensor.school_schedule', 'school_end_today') }}
+        {% endif %}
+      icon: mdi:clock-end
+
+    - name: "School Lessons Today"
+      unique_id: school_lessons_today
+      state: >
+        {{ state_attr('sensor.school_schedule', 'count_today') | default(0) }}
+      unit_of_measurement: "lessons"
+      icon: mdi:school
+
+    # ── Tomorrow ──────────────────────────────────────────────
+    - name: "School Start Tomorrow"
+      unique_id: school_start_tomorrow
+      state: >
+        {% if state_attr('sensor.school_schedule', 'school_start_tomorrow') is none %}
+          no school
+        {% else %}
+          {{ state_attr('sensor.school_schedule', 'school_start_tomorrow') }}
+        {% endif %}
+      icon: mdi:clock-start
+
+    - name: "School End Tomorrow"
+      unique_id: school_end_tomorrow
+      state: >
+        {% if state_attr('sensor.school_schedule', 'school_end_tomorrow') is none %}
+          no school
+        {% else %}
+          {{ state_attr('sensor.school_schedule', 'school_end_tomorrow') }}
+        {% endif %}
+      icon: mdi:clock-end
+
+    - name: "School Lessons Tomorrow"
+      unique_id: school_lessons_tomorrow
+      state: >
+        {{ state_attr('sensor.school_schedule', 'count_tomorrow') | default(0) }}
+      unit_of_measurement: "lessons"
+      icon: mdi:school
+
+    # ── School Status ─────────────────────────────────────────
+    # Central sensor that drives display refresh interval and dashboard cards.
+    # Possible states and their meanings:
+    #   school_today        — normal school day, early (before countdown phase)
+    #   school_soon         — school starts within p_start minutes (countdown)
+    #   school_running      — school is currently in session
+    #   school_ending_soon  — school ended within the last p_ende minutes
+    #   preview_tomorrow    — afternoon/evening: showing tomorrow's schedule
+    #   friday_weekend      — Friday afternoon, school is done for the week
+    #   weekend             — Saturday, or Sunday before h_sonntag
+    #   holiday             — school holiday today
+    #   public_holiday      — public holiday today
+    #   holiday_tomorrow    — holiday starts tomorrow
+    #   public_holiday_tomorrow — public holiday tomorrow
+    #   no_school_tomorrow  — no school tomorrow for other reason
+    #   no_school_today     — no school today (fallback)
+    - name: "School Status"
+      unique_id: school_status
+      variables:
+        cfg:
+          p_start: 60     # countdown phase: minutes before school start
+          p_ende: 15      # buffer after school ends before switching to preview
+          h_sonntag: 13   # Sunday: switch to preview mode from this hour
+          h_nacht: 23     # night mode starts at this hour
+          h_morgen: 6     # display wakes up from this hour
+          i_bald: 3       # refresh interval during countdown phase (min)
+          i_schule: 15    # refresh interval during school hours (min)
+          i_vorschau: 20  # refresh interval during preview mode (min)
+          i_wach: 10      # refresh interval in the morning (min)
+          i_standard: 30  # refresh interval for weekends/holidays (min)
+          i_nacht: 45     # refresh interval during night (min)
+
+      state: >
+        {% set jetzt = now() %}
+        {% set h = jetzt.hour %}
+        {% set wtag = jetzt.weekday() %}
+        {% set heute_str = jetzt.strftime('%Y-%m-%d') %}
+
+        {% set start_today = states('sensor.school_start_today') %}
+        {% set end_today   = states('sensor.school_end_today') %}
+        {% set start_tomorrow = states('sensor.school_start_tomorrow') %}
+
+        {% set has_time = (':' in start_today and start_today|length >= 4) %}
+        {% set ts_now   = as_timestamp(jetzt) %}
+
+        {% if has_time %}
+          {% set ts_start  = as_timestamp(strptime(heute_str ~ ' ' ~ start_today, '%Y-%m-%d %H:%M', default=none), 0) %}
+          {% set ts_end    = as_timestamp(strptime(heute_str ~ ' ' ~ end_today,   '%Y-%m-%d %H:%M', default=none), 0) %}
+          {% set ts_soon   = ts_start - (cfg.p_start * 60) %}
+          {% set ts_buffer = ts_end   + (cfg.p_ende  * 60) %}
+        {% else %}
+          {% set ts_start, ts_end, ts_soon, ts_buffer = 0, 0, 0, 0 %}
+        {% endif %}
+
+        {# 1. Holiday/public holiday today #}
+        {% if start_today in ['Holiday', 'Public Holiday'] %}
+          {{ 'holiday' if start_today == 'Holiday' else 'public_holiday' }}
+
+        {# 2. Friday afternoon — school is done for the week #}
+        {% elif wtag == 4 and ts_now >= ts_buffer and has_time %}
+          friday_weekend
+
+        {# 3. Saturday or Sunday morning #}
+        {% elif wtag == 5 or (wtag == 6 and h < cfg.h_sonntag) %}
+          weekend
+
+        {# 4. Preview mode (Sunday evening or after school during the week) #}
+        {% elif (wtag == 6 and h >= cfg.h_sonntag) or (has_time and ts_now >= ts_buffer) %}
+          {% if start_tomorrow == 'Holiday' %} holiday_tomorrow
+          {% elif start_tomorrow == 'Public Holiday' %} public_holiday_tomorrow
+          {% elif start_tomorrow in ['no school', 'unavailable', 'unknown'] %} no_school_tomorrow
+          {% else %} preview_tomorrow
+          {% endif %}
+
+        {# 5. Active school day progression #}
+        {% elif has_time and ts_now < ts_soon %}   school_today
+        {% elif has_time and ts_now >= ts_soon and ts_now < ts_start %} school_soon
+        {% elif has_time and ts_now >= ts_start and ts_now < ts_end %} school_running
+        {% elif has_time and ts_now >= ts_end and ts_now < ts_buffer %} school_ending_soon
+
+        {# 6. Fallback #}
+        {% else %} no_school_today
+        {% endif %}
+
+      attributes:
+        # Refresh interval in minutes — used by the E-ink display sleep automation
+        refresh_interval: >
+          {% set s = this.state %}
+          {% set h = now().hour %}
+          {% if h >= cfg.h_nacht or h < cfg.h_morgen %}
+            {{ cfg.i_nacht }}
+          {% elif s == 'school_soon' %}          {{ cfg.i_bald }}
+          {% elif s in ['school_running', 'school_ending_soon'] %} {{ cfg.i_schule }}
+          {% elif s in ['preview_tomorrow', 'no_school_tomorrow', 'holiday_tomorrow', 'public_holiday_tomorrow'] %}
+            {{ cfg.i_vorschau }}
+          {% else %}
+            {{ cfg.i_wach if s == 'school_today' else cfg.i_standard }}
+          {% endif %}
+
+        # School start/end for the relevant day (today or tomorrow in preview mode)
+        start: >
+          {{ states('sensor.school_start_tomorrow') if this.state in ['preview_tomorrow', 'no_school_tomorrow'] else states('sensor.school_start_today') }}
+        end: >
+          {{ states('sensor.school_end_tomorrow') if this.state in ['preview_tomorrow', 'no_school_tomorrow'] else states('sensor.school_end_today') }}
+
+    # ── School alarm times ────────────────────────────────────
+    # Calculated as: school start minus lead time from input_number.school_alarm_lead_time
+    - name: "School Alarm Today"
+      unique_id: school_alarm_today
+      icon: mdi:alarm
+      state: >
+        {% set lead = states('input_number.school_alarm_lead_time') | int(60) %}
+        {% set start = state_attr('sensor.school_schedule', 'school_start_today') %}
+        {% set count = state_attr('sensor.school_schedule', 'count_today') | int(0) %}
+        {% if count > 0 and start is defined and ':' in start|string %}
+          {{ (today_at(start) - timedelta(minutes=lead)).strftime('%H:%M') }}
+        {% else %}
+          No alarm
+        {% endif %}
+
+    - name: "School Alarm Tomorrow"
+      unique_id: school_alarm_tomorrow
+      icon: mdi:alarm
+      state: >
+        {% set lead = states('input_number.school_alarm_lead_time') | int(60) %}
+        {% set start = state_attr('sensor.school_schedule', 'school_start_tomorrow') %}
+        {% set count = state_attr('sensor.school_schedule', 'count_tomorrow') | int(0) %}
+        {% if count > 0 and start is defined and ':' in start|string %}
+          {{ (today_at(start) - timedelta(minutes=lead)).strftime('%H:%M') }}
+        {% else %}
+          No alarm
+        {% endif %}
+
+# ── Trigger sensor: weather snapshot for the E-ink display ────
+  - trigger:
+      - platform: time_pattern
+        minutes: "/30"
+      - platform: homeassistant
+        event: start
+    action:
+      - service: weather.get_forecasts
+        data:
+          type: hourly
+        target:
+          entity_id: weather.forecast_home  # adjust to your weather entity
+        response_variable: hourly_data
+    sensor:
+      - name: "EInk Weather Snapshot"
+        unique_id: eink_weather_snapshot
+        icon: mdi:weather-clock
+        state: "{{ now().isoformat() }}"
+        attributes:
+          forecast: >
+            {% set raw_forecast = hourly_data['weather.forecast_home'].forecast[:8] %}
+            {% set ns = namespace(mapped=[]) %}
+            {% for f in raw_forecast %}
+              {% set c = f.condition %}
+              {% set mapper = {
+                'partlycloudy':    'partly-cloudy',
+                'clear-night':     'night',
+                'sunny':           'sunny',
+                'cloudy':          'cloudy',
+                'fog':             'fog',
+                'hail':            'hail',
+                'lightning':       'lightning',
+                'lightning-rainy': 'lightning-rainy',
+                'pouring':         'pouring',
+                'rainy':           'rainy',
+                'snowy':           'snowy',
+                'snowy-rainy':     'snowy-rainy',
+                'windy':           'windy',
+                'exceptional':     'alert-circle-outline'
+              } %}
+              {% set new_cond = mapper.get(c, c) %}
+              {% set h = as_datetime(f.datetime).astimezone().hour %}
+              {% if (h >= 20 or h <= 6) and c == 'partlycloudy' %}
+                {% set new_cond = 'night-partly-cloudy' %}
+              {% endif %}
+              {% set new_f = dict(f, condition=new_cond) %}
+              {% set ns.mapped = ns.mapped + [new_f] %}
+            {% endfor %}
+            {{ ns.mapped }}

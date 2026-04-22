@@ -1,0 +1,60 @@
+type: custom:stack-in-card
+mode: horizontal
+keep:
+  margin: false
+  box_shadow: false
+  background: false
+card_mod:
+  style: |
+    ha-card {
+      --ha-card-border-width: 0px !important;
+      --ha-card-border-color: transparent !important;
+      --ha-card-box-shadow: none !important;
+      border: none !important;
+    }
+    :host {
+      --ha-card-border-width: 0px !important;
+    }
+cards:
+  - type: custom:decluttering-card
+    template: wetter_stunde
+    variables:
+      - index: 0
+      - display_wind: block
+      - padding: 2px
+  - type: custom:decluttering-card
+    template: wetter_stunde
+    variables:
+      - index: 1
+      - display_wind: block
+      - padding: 2px
+  - type: custom:decluttering-card
+    template: wetter_stunde
+    variables:
+      - index: 2
+      - display_wind: block
+      - padding: 2px
+  - type: custom:decluttering-card
+    template: wetter_stunde
+    variables:
+      - index: 3
+      - display_wind: block
+      - padding: 2px
+  - type: custom:decluttering-card
+    template: wetter_stunde
+    variables:
+      - index: 4
+      - display_wind: block
+      - padding: 2px
+  - type: custom:decluttering-card
+    template: wetter_stunde
+    variables:
+      - index: 5
+      - display_wind: block
+      - padding: 2px
+  - type: custom:decluttering-card
+    template: wetter_stunde
+    variables:
+      - index: 6
+      - display_wind: block
+      - padding: 2px

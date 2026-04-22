@@ -1,0 +1,5 @@
+title: E1001 Display
+# Load decluttering templates for weather cards
+decluttering_templates: !include templates/decluttering_templates.yaml
+views:
+  - !include views/e1001_view.yaml

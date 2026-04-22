@@ -1,0 +1,30 @@
+type: markdown
+content: >
+  <div style="font-size: 30px; font-weight: bold; text-align: center; line-height: 1.2; padding: 0;">
+    {% set today_alarm    = states('sensor.school_alarm_today') %}
+    {% set tomorrow_alarm = states('sensor.school_alarm_tomorrow') %}
+  <div>ALARM ->Today: {{ '--:--' if today_alarm in ['unavailable', 'unknown', 'none'] else today_alarm }}   |->Tomorrow: {{ '--:--' if tomorrow_alarm in ['unavailable', 'unknown', 'none'] else tomorrow_alarm }}</div>
+  {% set today_valid    = today_alarm    not in ['unavailable', 'unknown', 'none', 'No alarm'] and ':' in today_alarm %}
+  {% set tomorrow_valid = tomorrow_alarm not in ['unavailable', 'unknown', 'none', 'No alarm'] and ':' in tomorrow_alarm %}
+  {% if today_valid %}
+    {% set h = today_alarm.split(':')[0] | int %}
+    {% set m = today_alarm.split(':')[1] | int %}
+    {% set past = (now().hour > h) or (now().hour == h and now().minute >= m) %}
+  {% else %}
+    {% set past = true %}
+  {% endif %}
+  {% if not past %}
+  <div style="font-size: 22px;">Next alarm: {{ today_alarm }} (today)</div>
+  {% elif tomorrow_valid %}
+  <div style="font-size: 22px;">Next alarm: {{ tomorrow_alarm }} (tomorrow)</div>
+  {% else %}
+  <div style="font-size: 22px;">Next alarm: --:--</div>
+  {% endif %}
+  </div>
+
+card_mod:
+  style: |
+    ha-card {
+      padding: 0px 0px !important;
+      background: transparent !important;
+    }

@@ -1,0 +1,41 @@
+title: E1001 Kitchen
+path: e1001_kitchen
+icon: mdi:countertop
+type: custom:grid-layout
+layout:
+  grid-template-columns: 50% 50%
+  grid-template-rows: auto
+  grid-gap: 4px
+  margin: 0px
+  padding: 0px
+cards:
+  # Left column
+  - type: vertical-stack
+    view_layout:
+      grid-column: 1
+    cards:
+      - !include ../cards/card_infobox.yaml
+      - !include ../cards/card_schedule.yaml
+    card_mod:
+      style: |
+        ha-card {
+          border: none !important;
+          box-shadow: none !important;
+          outline: none !important;
+        }
+
+  # Right column
+  - type: vertical-stack
+    view_layout:
+      grid-column: 2
+    cards:
+      - !include ../cards/card_weather.yaml
+      - !include ../cards/card_alarm.yaml
+      - !include ../cards/card_calendar.yaml
+    card_mod:
+      style: |
+        ha-card {
+          border: none !important;
+          box-shadow: none !important;
+          outline: none !important;
+        }

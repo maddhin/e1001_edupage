@@ -1,0 +1,154 @@
+type: custom:html-template-card
+ignore_line_breaks: true
+content: >
+  {# Status check — hide schedule on days with no school #}
+  {% set status = states('sensor.school_status') %}
+  {% set hide_statuses = ['weekend', 'holiday', 'public_holiday', 'no_school_tomorrow', 'no_school_today', 'friday_weekend', 'public_holiday_tomorrow', 'holiday_tomorrow'] %}
+
+  {% if status not in hide_statuses %}
+    {% set show_tomorrow = status in ['preview_tomorrow'] %}
+
+    {% set date_attr = state_attr('sensor.school_schedule', 'date_tomorrow' if show_tomorrow else 'date_today') | default(None) %}
+    {% set data_raw  = state_attr('sensor.school_schedule', 'data_tomorrow' if show_tomorrow else 'data_today') %}
+
+    {% set data = [] %}
+    {% if data_raw is iterable and data_raw is not string and (data_raw | length) > 0 %}
+      {% set data = data_raw %}
+    {% endif %}
+
+    {% if not date_attr or data | length == 0 %}
+      <div style="padding:20px; text-align:center;">Loading schedule...</div>
+    {% else %}
+      {% set weekdays  = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
+      {% set months    = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] %}
+      {% set day_short = '' %}
+
+      {% set parts = date_attr.split('-') if date_attr else [] %}
+      {% if parts | length == 3 %}
+        {% set yyyy       = parts[0] %}
+        {% set mm         = parts[1] | int %}
+        {% set dd         = parts[2] %}
+        {% set month_idx  = mm - 1 %}
+        {% set month_name = months[month_idx] if month_idx >= 0 and month_idx < 12 else (mm|string) %}
+        {% set date_text  = dd ~ ' ' ~ month_name ~ ' ' ~ yyyy %}
+      {% else %}
+        {% set date_text = date_attr %}
+      {% endif %}
+
+      {% if date_attr %}
+        {% set dt = as_datetime(date_attr) %}
+        {% if dt %}
+          {% set day_short = weekdays[dt.weekday()] %}
+        {% endif %}
+      {% endif %}
+
+      {% set has_pe       = is_state('binary_sensor.child_has_pe_tomorrow' if show_tomorrow else 'binary_sensor.child_has_pe_today', 'on') %}
+      {% set school_start = state_attr('sensor.school_status', 'start') | default('no school') %}
+      {% set school_end   = state_attr('sensor.school_status', 'end') | default('') %}
+      {% set card_title   = 'Schedule Tomorrow' if show_tomorrow else 'Schedule Today' %}
+
+      <div style="border:2px solid #000;background:#fff;font-family:monospace;padding:0;color:#000;">
+        <div style="display:flex;justify-content:space-between;padding:4px 8px 2px;border-bottom:1px solid #000;">
+          <div>
+            <div style="font-size:1.3em;font-weight:bold;">{{ card_title }}</div>
+            <div style="font-size:0.95em;font-weight:bold;color:#000;">
+              {{ date_text }},
+              {% if school_start == 'no school' %}no school{% else %}{{ school_start }} - {{ school_end }}{% endif %}
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:1.8em;font-weight:bold;">
+              {% if has_pe %}<ha-icon icon="mdi:soccer" style="margin-right:5px;"></ha-icon>{% endif %}{{ day_short }}
+            </div>
+          </div>
+        </div>
+        <div style="padding:2px 6px;">
+          <table style="width:100%;border-collapse:collapse;font-size:1.0em;">
+            <tr style="background:#000;color:#fff;">
+              <th style="width:2%;padding:1px 1px;text-align:left;">#</th>
+              <th style="width:35%;padding:3px 6px;text-align:left;">Subject</th>
+              <th style="width:63%;padding:3px 6px;text-align:left;">Change</th>
+            </tr>
+            {% for lesson in data %}
+            <tr style="{% if loop.index0 % 2 == 0 %}background:#f8f8f8;{% endif %} border-bottom:1px solid #000; line-height: 1.1;">
+              <td style="padding:1px 4px; vertical-align: middle;">{{ lesson.period | default('') }}</td>
+
+              {# Subject column #}
+              <td style="padding:2px 6px; vertical-align: middle; {% if lesson.free %}color:#000;font-style:italic;{% else %}font-weight:bold;{% endif %}">
+                {% set subj = lesson.subject | default('') %}
+                {% if subj | lower == 'cancelled' %}
+                  <span style="text-decoration: line-through; color: #000; font-weight: normal; margin-right: 2px;">{{ lesson.subject_original }}</span>
+                {% else %}
+                  {{ 'free' if lesson.free else lesson.subject }}
+                {% endif %}
+              </td>
+
+              {# Change/notes column #}
+              <td style="padding:1px 6px; font-size:0.82em; font-weight:bold; color:#000; vertical-align: middle;">
+                {% if lesson.notes is iterable and lesson.notes is not string and (lesson.notes | length) > 0 %}
+                  {% for n in lesson.notes %}
+                    <div style="display:flex; align-items:center; margin-bottom: 0px; margin-top: 0px; line-height: 1.0;">
+                      {% if n.icon %}
+                        <ha-icon icon="{{ n.icon }}" style="--mdc-icon-size: 14px; margin-right: 3px; flex-shrink: 0;"></ha-icon>
+                      {% endif %}
+                      <span>{{ n.text | default('') }}</span>
+                    </div>
+                  {% endfor %}
+                {% else %}
+                  {{ lesson.note | default('') }}
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </table>
+        </div>
+      </div>
+
+    {% endif %}
+  {% else %}
+    {# Alternative view when there is no school #}
+    <div style="display: flex; justify-content: center; align-items: center; height: 250px; font-family: monospace; text-align: center; background: #fff; color: #000;">
+      <div>
+        {% if status == 'friday_weekend' %}
+          <div style="font-size: 2.2em; font-weight: 900; text-transform: uppercase; line-height: 0.9; letter-spacing: -1px; transform: rotate(2deg); margin-bottom: 10px;">
+            Hands<br>up for
+          </div>
+          <div style="font-size: 2.5em; font-weight: 900; text-transform: uppercase; line-height: 0.9; letter-spacing: -1px; transform: rotate(-2deg); margin-bottom: 15px;">
+            the
+          </div>
+          <div style="font-size: 1.4em; font-weight: bold; text-transform: uppercase; background: #000; color: #fff; padding: 5px 15px; display: inline-block; transform: rotate(3deg); box-shadow: 5px 5px 0px #ccc;">
+            Weekend!
+          </div>
+
+        {% elif status == 'holiday_tomorrow' %}
+          <ha-icon icon="mdi:bag-checked" style="--mdc-icon-size: 60px; margin-bottom: 5px;"></ha-icon>
+          <div style="font-size: 1.8em; font-weight: 900; background: #000; color: #fff; padding: 2px 10px; margin: 5px 0;">HOLIDAY</div>
+          <div style="font-size: 1.1em; font-weight: bold; font-style: italic;">...starting tomorrow!</div>
+
+        {% elif status == 'public_holiday_tomorrow' %}
+          <ha-icon icon="mdi:alarm-off" style="--mdc-icon-size: 50px; margin-bottom: 10px;"></ha-icon>
+          <div style="font-size: 1.5em; font-weight: bold;">Day off tomorrow!</div>
+          <div style="border-top: 2px solid #000; border-bottom: 2px solid #000; margin: 5px 20px; padding: 3px 0; font-weight: bold;">
+            PUBLIC HOLIDAY VIBES
+          </div>
+          <div style="font-size: 0.9em;">Don't forget to turn off the alarm.</div>
+
+        {% elif status == 'public_holiday' %}
+          <ha-icon icon="mdi:calendar-star" style="--mdc-icon-size: 60px; margin-bottom: 10px;"></ha-icon>
+          <div style="font-size: 1.6em; font-weight: bold;">Public Holiday</div>
+          <div style="font-size: 1.1em;">Time to sleep in!</div>
+
+        {% elif status == 'weekend' %}
+          <div style="font-size: 2.0em; font-weight: 900; font-family: 'serif'; font-style: italic; letter-spacing: 1px; color: #000;">
+            Relax
+          </div>
+          <div style="font-size: 1.2em; margin-top: 5px; font-weight: bold; border: 2px solid #000; padding: 4px 12px; display: inline-block; border-radius: 15px;">
+            Time to recharge
+          </div>
+
+        {% else %}
+          {# generic no-school fallback — no content #}
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}

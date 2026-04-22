@@ -1,0 +1,89 @@
+# Decluttering template for hourly weather slots.
+# Used by card_weather.yaml. Requires:
+#   - sensor.eink_weather_snapshot (defined in templates.yaml)
+#   - custom:button-card HACS frontend component
+  wetter_stunde:
+    card:
+      type: custom:button-card
+      entity: sensor.eink_weather_snapshot
+      show_icon: true
+      name: >-
+        [[[ return new
+        Date(entity.attributes.forecast[[[index]]].datetime).getHours() + ':00'
+        ]]]
+      icon: >-
+        [[[ return 'mdi:weather-' +
+        entity.attributes.forecast[[[index]]].condition ]]]
+      custom_fields:
+        line_top: ' '
+        line_bottom: ' '
+        temp: >-
+          [[[ return
+          Math.round(entity.attributes.forecast[[[index]]].temperature) + '°'
+          ]]]
+        wind: |-
+          [[[
+            const speed = Math.round(entity.attributes.forecast[[[index]]].wind_speed);
+            return `
+              <div style="display: flex; align-items: center; justify-content: center;">
+                <ha-icon icon="mdi:weather-windy"
+                  style="width: 16px; height: 16px; color: black;
+                         position: relative; top: -3px; margin-right: 3px;">
+                </ha-icon>
+                <span style="line-height: 1;">${speed}</span>
+              </div>
+            `;
+          ]]]
+      styles:
+        card:
+          - min-height: 160px
+          - height: auto
+          - padding: '[[[padding]]]'
+          - padding-top: 25px
+          - padding-bottom: 15px
+          - border: none
+          - background: white
+          - box-shadow: none
+        grid:
+          - grid-template-areas: |
+              "line_top"
+              "n"
+              "i"
+              "temp"
+              "wind"
+              "line_bottom"
+          - grid-template-rows: 2px 28px 40px 25px 25px 2px
+          - grid-template-columns: 1fr
+        name:
+          - font-weight: bold
+          - font-size: 16px
+          - color: black
+          - align-self: center
+          - margin-bottom: 1px
+        icon:
+          - width: 40px
+          - height: 40px
+          - color: black
+          - align-self: center
+        custom_fields:
+          line_top:
+            - background-color: black
+            - height: 2px
+            - width: 100%
+            - align-self: start
+          line_bottom:
+            - background-color: black
+            - height: 2px
+            - width: 100%
+            - align-self: end
+          temp:
+            - font-weight: bold
+            - font-size: 19px
+            - color: black
+          wind:
+            - font-size: 14px
+            - font-weight: bold
+            - color: black
+            - justify-self: center
+            - align-self: center
+            - display: '[[[display_wind]]]'

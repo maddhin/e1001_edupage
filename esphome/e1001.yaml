@@ -1,0 +1,406 @@
+substitutions:
+  name: e1001-kitchen
+  friendly_name: E1001_Kitchen
+  # puppet_url: "http://YOUR_HA_IP:10000/e1001?viewport=800x480&colors=000000%2CFFFFFF%2C555555&lang=en"
+  # puppet_url: "http://YOUR_HA_IP:10000/e1001?viewport=800x480&theme=Graphite+Light&lang=en"
+
+  run_duration: 30s
+  sleep_duration: 60s       # fallback if HA value is not available
+  battery_icon_scale: "0.8" # icon scale (1.0 = original, 0.5 = half size)
+  battery_text_size: "14"   # font size in pixels for battery percentage
+  battery_widget_x: "735"   # horizontal position on display
+  battery_widget_y: "5"     # vertical position on display
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  platformio_options:
+    build_flags:
+      - -DBOARD_HAS_PSRAM
+      - -mfix-esp32-psram-cache-issue
+  on_boot:
+    priority: -100  # run after WiFi and API are typically ready
+    then:
+      - lambda: |-
+          size_t psram_size = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+          ESP_LOGI("custom", "PSRAM at boot: %d bytes", psram_size);
+
+          // If waking from deep sleep and PSRAM is 0 -> hard restart
+          if (psram_size == 0) {
+            ESP_LOGE("custom", "PSRAM NOT FOUND! Forcing restart...");
+            delay(100);
+            esp_restart();
+          }
+      - wait_until:
+          lambda: 'return network::is_connected() && api::global_api_server->is_connected();'
+      - delay: 5s   # brief wait for HA states to synchronise
+      - logger.log: "WiFi & API ready, starting image download..."
+      - lambda: |-
+          ESP_LOGI("custom", "Free Internal Heap: %d bytes", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+          ESP_LOGI("custom", "Free PSRAM (SPIRAM): %d bytes", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+      - lambda: |-
+          if (id(url_from_ha).has_state() && id(url_from_ha).state.length() > 10) {
+            id(puppet_image).set_url(id(url_from_ha).state);
+            id(puppet_image).update();
+          } else {
+            ESP_LOGW("custom", "URL from HA not yet available or invalid!");
+          }
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+    # Enable external PSRAM
+    sdkconfig_options:
+      CONFIG_SPIRAM: "y"
+      CONFIG_SPIRAM_BOOT_INIT: "y"
+      CONFIG_SPIRAM_USE_MALLOC: "y"
+      CONFIG_SPIRAM_TYPE_AUTO: "y"
+      CONFIG_SPIRAM_SPEED_80M: "y"
+      CONFIG_SPIRAM_MODE_OCT: "y"
+      CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP: "y"
+
+logger:
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  ap:
+    ssid: "E1001-Kitchen Fallback Hotspot"
+    password: !secret fallback_ap_password
+
+# Battery enable pin — keep active while measuring
+output:
+  - platform: gpio
+    pin: GPIO21
+    id: bsp_battery_enable
+
+time:
+  - platform: homeassistant
+    id: esptime
+
+sensor:
+  # Import sleep duration helper from HA
+  - platform: homeassistant
+    entity_id: input_number.eink_sleep_duration
+    id: ha_sleep_duration
+    internal: true
+    on_value:
+      then:
+        - logger.log: "Received new sleep duration from HA"
+
+  - platform: adc
+    pin: GPIO1
+    name: "Battery Voltage"
+    id: battery_voltage
+    update_interval: never   # triggered manually
+    attenuation: 12db
+    filters:
+      # take 15 readings, remove outliers with median filter (spikes from WiFi/display)
+      - median:
+          window_size: 15
+          send_every: 15
+      - multiply: 2.0
+    on_value:
+      then:
+        - component.update: battery_level
+
+  - platform: template
+    name: "Battery Level"
+    id: battery_level
+    unit_of_measurement: "%"
+    device_class: battery
+    update_interval: never
+    lambda: 'return id(battery_voltage).state;'
+    filters:
+      - calibrate_linear:
+          - 4.15 -> 100.0
+          - 3.27 -> 0.0
+      - clamp:
+          min_value: 0
+          max_value: 100
+
+  - platform: template
+    name: "Planned Sleep Duration"
+    id: sleep_minutes
+    unit_of_measurement: "min"
+    icon: "mdi:bed-clock"
+    accuracy_decimals: 1
+    update_interval: never  # triggered manually before sleep
+    lambda: |-
+      if (id(ha_sleep_duration).has_state()) {
+        return id(ha_sleep_duration).state;
+      }
+      return 10.0;  // safe fallback value
+
+binary_sensor:
+  - platform: homeassistant
+    name: "Maintenance Mode"
+    id: maintenance_mode
+    entity_id: input_boolean.eink_maintenance_mode
+    on_state:
+      - if:
+          condition:
+            binary_sensor.is_off: maintenance_mode
+          then:
+            - logger.log: "Maintenance mode disabled in HA! Starting final display cycle..."
+            - lambda: |-
+                if (id(url_from_ha).has_state()) {
+                  id(puppet_image).set_url(id(url_from_ha).state);
+                  id(puppet_image).update();
+                }
+          else:
+            - logger.log: "Maintenance mode enabled in HA — staying awake..."
+            - deep_sleep.prevent: ds
+            - component.update: epaper_display  # redraw with SERVICE overlay
+
+  - platform: gpio
+    pin:
+      number: GPIO3
+      inverted: true
+      mode: INPUT_PULLUP
+    name: "Green Button"
+    id: green_button
+    on_press:
+      then:
+        - logger.log: "Green button pressed — triggering update..."
+        - lambda: |-
+            if (id(url_from_ha).has_state()) {
+              id(puppet_image).set_url(id(url_from_ha).state);
+              id(puppet_image).update();
+            }
+
+text_sensor:
+  - platform: homeassistant
+    entity_id: input_text.eink_url
+    id: url_from_ha
+    internal: true  # not shown in ESPHome UI
+
+  - platform: template
+    name: "Next Wakeup Time"
+    id: next_wakeup_time
+    icon: "mdi:alarm"
+    update_interval: never  # triggered manually
+    lambda: |-
+      auto now = id(esptime).now();
+      if (!now.is_valid()) return {"Time not synced"};
+
+      float mins = id(sleep_minutes).state;
+      time_t wakeup_timestamp = now.timestamp + (uint32_t)(mins * 60);
+
+      struct tm * timeinfo = localtime(&wakeup_timestamp);
+      char buffer[10];
+      strftime(buffer, sizeof(buffer), "%H:%M", timeinfo);
+      return {buffer};
+
+button:
+  - platform: template
+    name: "Refresh Display Manually"
+    id: refresh_display_button
+    icon: "mdi:refresh"
+    on_press:
+      then:
+        - logger.log: "Manual refresh requested..."
+        - lambda: |-
+            id(puppet_image).set_url(id(url_from_ha).state);
+            id(puppet_image).update();
+
+# Main flow control script
+script:
+  - id: measure_battery_script
+    mode: single
+    then:
+      - output.turn_on: bsp_battery_enable
+      - delay: 500ms  # stabilise voltage on pin before measuring
+      - repeat:
+          count: 15
+          then:
+            - component.update: battery_voltage
+            - delay: 50ms
+      - output.turn_off: bsp_battery_enable  # save power
+
+captive_portal:
+
+# SPI for E1001 display
+spi:
+  clk_pin: GPIO7
+  mosi_pin: GPIO9
+
+# Font for status overlay
+font:
+  - file: "gfonts://Roboto"
+    id: font_battery
+    size: ${battery_text_size}
+  - file: "gfonts://Roboto@700"
+    id: font_battery_bold
+    size: ${battery_text_size}
+
+# Seeedstudio reTerminal E1001 — 7.5" monochrome ePaper display
+display:
+  - platform: waveshare_epaper
+    id: epaper_display
+    cs_pin: GPIO10
+    dc_pin: GPIO11
+    reset_pin:
+      number: GPIO12
+      inverted: false
+    busy_pin:
+      number: GPIO13
+      inverted: true
+    model: 7.50inv2
+    update_interval: never
+    lambda: |-
+      // 1. Draw puppet image
+      it.image(0, 0, id(puppet_image));
+
+      // 2. Battery widget (top right corner)
+      if (!isnan(id(battery_level).state)) {
+        const float scale = ${battery_icon_scale};
+        const int x_start = ${battery_widget_x};
+        const int y_start = ${battery_widget_y};
+        const float level = id(battery_level).state;
+
+        // Timestamp
+        char time_str[30];
+        id(esptime).now().strftime(time_str, sizeof(time_str), "Updated: %d.%m. %H:%M");
+
+        // Dynamic dimensions
+        const int b_w = (int)(35 * scale);
+        const int b_h = (int)(18 * scale);
+        const int spacing = (int)(10 * scale);
+
+        int x1, y1, text_w, text_h;
+        it.get_text_bounds(0, 0, "100%", id(font_battery_bold), TextAlign::TOP_LEFT, &x1, &y1, &text_w, &text_h);
+
+        int tx1, ty1, time_w, time_h;
+        it.get_text_bounds(0, 0, time_str, id(font_battery_bold), TextAlign::TOP_LEFT, &tx1, &ty1, &time_w, &time_h);
+
+        int sx1, sy1, service_w = 0, service_h = 0;
+        if (id(maintenance_mode).state) {
+          it.get_text_bounds(0, 0, "SERVICE", id(font_battery_bold), TextAlign::TOP_LEFT, &sx1, &sy1, &service_w, &service_h);
+        }
+
+        int max_h = std::max({b_h, text_h, time_h, service_h});
+        int center_y = y_start + (max_h / 2);
+
+        // Draw black background bar
+        int total_width = b_w + (spacing * 2) + text_w + time_w + 20;
+        if (service_w > 0) total_width += service_w + spacing;
+
+        int box_x_start = x_start - time_w - spacing - 10;
+        if (service_w > 0) box_x_start -= (service_w + spacing);
+
+        it.filled_rectangle(box_x_start, y_start - 5, total_width, max_h + 10, Color::BLACK);
+
+        // SERVICE label (if maintenance mode active)
+        if (id(maintenance_mode).state) {
+          it.print(box_x_start + 5, center_y, id(font_battery_bold), TextAlign::CENTER_LEFT, "SERVICE");
+        }
+
+        // Timestamp
+        it.printf(x_start - spacing, center_y, id(font_battery_bold), TextAlign::CENTER_RIGHT, "%s", time_str);
+
+        // Battery icon
+        int symbol_y = center_y - (b_h / 2);
+        it.rectangle(x_start, symbol_y, b_w, b_h, Color::WHITE);
+        it.filled_rectangle(x_start + b_w, symbol_y + (b_h / 4), (int)(3 * scale), b_h / 2, Color::WHITE);
+
+        int fill_w = (int)((b_w - 4) * (level / 100.0));
+        if (fill_w > 0) {
+          it.filled_rectangle(x_start + 2, symbol_y + 2, fill_w, b_h - 4, Color::WHITE);
+        }
+
+        // Battery percentage
+        it.printf(x_start + b_w + spacing, center_y, id(font_battery_bold), TextAlign::CENTER_LEFT, "%.0f%%", level);
+      }
+
+http_request:
+  useragent: "ESPHome-E1001/1.0"
+  verify_ssl: false
+  timeout: 10s
+  watchdog_timeout: 15s
+
+online_image:
+  - id: puppet_image
+    buffer_size: 65536
+    url: "http://localhost/placeholder.png"  # overridden at runtime from input_text.eink_url
+    format: PNG
+    type: BINARY  # black/white for ePaper
+    update_interval: never
+    on_download_finished:
+      # 1. Ensure API connection is alive
+      - wait_until:
+          lambda: 'return network::is_connected() && api::global_api_server->is_connected();'
+
+      # 2. Measure battery (blocking until script finishes)
+      - script.execute: measure_battery_script
+      - wait_until:
+          not:
+            script.is_running: measure_battery_script
+
+      # 3. Small buffer for sensor sync
+      - delay: 2s
+
+      # 4. Update derived sensors so HA has current values
+      - component.update: sleep_minutes
+      - component.update: next_wakeup_time
+      - logger.log:
+          format: ">>> SLEEP PLAN: sleeping for %.1f min, waking up at %s"
+          args: [ 'id(sleep_minutes).state', 'id(next_wakeup_time).state.c_str()' ]
+
+      # 5. Refresh display
+      - component.update: epaper_display
+      - logger.log: "Image download complete."
+
+      # 6. Status log
+      - logger.log:
+          format: "Check maintenance: %s, Battery: %.2f"
+          args: [ 'id(maintenance_mode).state ? "ON" : "OFF"', 'id(battery_level).state' ]
+
+      - delay: 10s  # time for e-ink refresh cycle
+
+      # 7. Sleep or stay awake depending on maintenance mode
+      - if:
+          condition:
+            binary_sensor.is_on: maintenance_mode
+          then:
+            - logger.log: "Maintenance mode active — staying awake!"
+            - deep_sleep.prevent: ds
+            - component.update: epaper_display
+          else:
+            - logger.log: "Going to sleep..."
+            - deep_sleep.enter:
+                id: ds
+                sleep_duration: !lambda |-
+                  float mins = id(sleep_minutes).state;
+                  uint32_t final_ms = (uint32_t)(mins * 60000);
+                  ESP_LOGI("main", ">>> DEEP SLEEP: sleeping for %.1f minutes (%u ms)", mins, final_ms);
+                  return final_ms;
+
+    on_error:
+      then:
+        - logger.log: "IMAGE ERROR! Going to sleep to preserve battery."
+        - deep_sleep.enter:
+            id: ds
+            sleep_duration: !lambda |-
+              float retry_mins = 5.0;
+              if (id(ha_sleep_duration).has_state() && id(ha_sleep_duration).state < 5.0) {
+                retry_mins = id(ha_sleep_duration).state;
+              }
+              uint32_t retry_ms = (uint32_t)(retry_mins * 60000);
+              ESP_LOGW("main", ">>> ERROR RETRY: retrying in %.1f minutes", retry_mins);
+              return retry_ms;
+
+deep_sleep:
+  id: ds
+  run_duration: 5min
+  # sleep_duration is set dynamically in on_download_finished
