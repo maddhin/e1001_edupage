@@ -13,7 +13,23 @@ The display wakes up from deep sleep, downloads a rendered PNG of a Lovelace das
 
 The school schedule is fetched from [Edupage](https://www.edupage.org/) using a Python script and exposed to Home Assistant as a `command_line` sensor.
 
+## Features
+- gets childs school schedule directly from Edupage API and makes the relevant information available in sensor school status -> with this sensor you can start automations and so on
+- the school sensor delivers also a summary of the school day as speech text which can be used e.g. for the morning alert to read out today's schedule.
+- because of the Edupage API calls, the sensor is always up to date and you get the latest changes in schedule (on the display!). 
+- deeply in HA integrated Seeedstudio E1001 epaper display. The display fetches the URL and sleep times from HA, service mode can be switched on from HA,...
+- the display shows service mode, last updated and battery status on top of the puppet dashboard
+- the display dashboard primarily shows a status windows (school times, countdown to school start,...) and todays/tomorrows school schedule incl. an icon if today/tomorrow is PE and (more or less) live changes in schedule. All this is based on the current status of the school status sensor. So this is dynamic. So, one can put special messages for weekends, etc. Besides this, it shows todays and tomorrows calendar events, the weather for the next couple of ours and the next alerts (currently only for debugging)
+
+It took qiute some fiddeling to make all that work and almost everything is working stable. Of course, there is absolutely plenty of room to make all this look more pretty. I have been focusing of getting all the features I wanted to work. Now one can play with the edupage infos and display. 
+
+There is one this I haven't completely figured out: the school schedule is sometimes not showing directly after a HA restart. I have been tryiong to make this more robust but failed so far. If you have a good idea, please drop a message. 
+
+Where I have completely failed is to make the grayscale work on the E1001 display. I read it is supposed to have 4 gray scales but none of the options I tried worked out. Hence a b/w optimised display. I will update this here, if I figure it out (or somebody shares a solution to me).
+
 ### What it shows
+<img width="1106" height="768" alt="e1001_edupage (Mittel)" src="https://github.com/user-attachments/assets/b1797d6b-06ce-444e-9023-6d2fbe9b118e" />
+
 
 | Area | Content |
 |---|---|
