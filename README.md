@@ -4,7 +4,7 @@ A battery-powered E-ink display in the kitchen that shows your child's school sc
 
 <!-- Add a screenshot here -->
 <!-- ![E1001 Display](docs/screenshot.jpg) -->
-
+<img width="1106" height="768" alt="e1001_edupage (Mittel)" src="https://github.com/user-attachments/assets/b1797d6b-06ce-444e-9023-6d2fbe9b118e" />
 ---
 
 ## Overview
@@ -12,6 +12,8 @@ A battery-powered E-ink display in the kitchen that shows your child's school sc
 The display wakes up from deep sleep, downloads a rendered PNG of a Lovelace dashboard view (via a headless browser / Puppet), shows it on screen, and goes back to sleep. The sleep duration is dynamically adjusted based on the current school status — short intervals right before school starts, longer during the night.
 
 The school schedule is fetched from [Edupage](https://www.edupage.org/) using a Python script and exposed to Home Assistant as a `command_line` sensor.
+
+As my files had German names etc I ask the AI to translate the sensor names and so on and put everything together. IMHO you probably only take the pieces of code you need anyway but in case something is odd, ask and use common sense ;) 
 
 ## Features
 - gets childs school schedule directly from Edupage API and makes the relevant information available in sensor school status -> with this sensor you can start automations and so on
@@ -28,8 +30,6 @@ There is one this I haven't completely figured out: the school schedule is somet
 Where I have completely failed is to make the grayscale work on the E1001 display. I read it is supposed to have 4 gray scales but none of the options I tried worked out. Hence a b/w optimised display. I will update this here, if I figure it out (or somebody shares a solution to me).
 
 ### What it shows
-<img width="1106" height="768" alt="e1001_edupage (Mittel)" src="https://github.com/user-attachments/assets/b1797d6b-06ce-444e-9023-6d2fbe9b118e" />
-
 
 | Area | Content |
 |---|---|
